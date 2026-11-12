@@ -1,7 +1,7 @@
 import numpy as np
 
-from northstar_rag.models import Chunk
-from northstar_rag.retrieval import HybridRetriever
+from local_rag.models import Chunk
+from local_rag.retrieval import HybridRetriever
 
 
 def test_hybrid_retrieval_uses_exact_terms():

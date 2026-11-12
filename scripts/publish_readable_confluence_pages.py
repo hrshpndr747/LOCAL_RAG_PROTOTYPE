@@ -17,7 +17,7 @@ API_TOKEN = os.environ["CONFLUENCE_API_TOKEN"]
 SPACE_ID = "163842"
 CORPUS_PAGE_ID = "425986"
 
-from northstar_rag.loaders import load_file
+from local_rag.loaders import load_file
 
 
 def request_with_retry(session, method, url, **kwargs):

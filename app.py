@@ -5,13 +5,13 @@ from pathlib import Path
 
 import streamlit as st
 
-from northstar_rag import RAGService, Settings
-from northstar_rag.ollama_client import OllamaClient, OllamaError
-from northstar_rag.sql_tool import execute_read_only
+from local_rag import RAGService, Settings
+from local_rag.ollama_client import OllamaClient, OllamaError
+from local_rag.sql_tool import execute_read_only
 
 
-st.set_page_config(page_title="Northstar Local RAG", page_icon="🔎", layout="wide")
-st.title("Northstar local knowledge assistant")
+st.set_page_config(page_title="Local RAG Prototype", page_icon="🔎", layout="wide")
+st.title("Local RAG knowledge assistant")
 st.caption("Local Ollama model • hybrid retrieval • evidence citations • fictional demo data")
 
 settings = Settings.from_env()
@@ -86,7 +86,7 @@ for message in st.session_state.messages:
                 for source in message["sources"]:
                     st.markdown(source)
 
-question = st.chat_input("Ask a question about the Northstar demo data")
+question = st.chat_input("Ask a question about the demo data")
 if question:
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):

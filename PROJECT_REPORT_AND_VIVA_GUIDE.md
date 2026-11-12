@@ -1,8 +1,8 @@
 # Academic Project Report & Viva Voce Guide
-## Project Title: Northstar — Privacy-Preserving Multimodal Local Retrieval-Augmented Generation (RAG) System
+## Project Title: LOCAL_RAG_PROTOTYPE — Privacy-Preserving Multimodal Local Retrieval-Augmented Generation (RAG) System
 **Academic Context:** Term 3 Project (IIT Guwahati)  
 **Author:** Harsh Pundir  
-**Repository:** [github.com/hrshpndr747/NORTH_STAR_LOCAL_RAG_PROTOTYPE](https://github.com/hrshpndr747/NORTH_STAR_LOCAL_RAG_PROTOTYPE)
+**Repository:** [github.com/hrshpndr747/LOCAL_RAG_PROTOTYPE](https://github.com/hrshpndr747/LOCAL_RAG_PROTOTYPE)
 
 ---
 
@@ -174,7 +174,7 @@ Here are the highest-probability questions the examiner will ask, along with the
 #### Q5: "How did you handle rate-limiting and attachment syncing from Confluence?"
 > **Examiner's intent:** Testing production-readiness and robustness.  
 > **Your Answer:**  
-> "Confluence Cloud REST API enforces strict rate limiting. In [`northstar_rag/confluence.py`](file:///c:/Users/Harsh/Desktop/IITG%20term%20Proj/NORTH_STAR_LOCAL_RAG_PROTOTYPE-main/northstar_rag/confluence.py), I implemented exponential backoff with jitter and dynamic inspection of the HTTP `429 Retry-After` response header. Furthermore, attachments use version hashing and metadata manifests (`.confluence.json`), downloading only new or modified attachments rather than re-downloading existing media."
+> "Confluence Cloud REST API enforces strict rate limiting. In [`local_rag/confluence.py`](local_rag/confluence.py), I implemented exponential backoff with jitter and dynamic inspection of the HTTP `429 Retry-After` response header. Furthermore, attachments use version hashing and metadata manifests (`.confluence.json`), downloading only new or modified attachments rather than re-downloading existing media."
 
 ---
 

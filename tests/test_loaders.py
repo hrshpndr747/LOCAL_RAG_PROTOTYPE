@@ -1,7 +1,7 @@
 import sqlite3
 from pathlib import Path
 
-from northstar_rag.loaders import load_docx, load_pdf, load_sqlite, load_vtt, load_xlsx
+from local_rag.loaders import load_docx, load_pdf, load_sqlite, load_vtt, load_xlsx
 
 
 ROOT = Path(__file__).resolve().parents[1] / "data" / "confluence"

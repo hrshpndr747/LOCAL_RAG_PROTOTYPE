@@ -2,8 +2,8 @@ from pathlib import Path
 
 import numpy as np
 
-from northstar_rag.config import Settings
-from northstar_rag.service import REFUSAL, RAGService
+from local_rag.config import Settings
+from local_rag.service import REFUSAL, RAGService
 
 
 class FakeOllamaClient:
@@ -39,6 +39,6 @@ def test_service_builds_index_and_guarantees_citation(tmp_path, monkeypatch):
     assert answer.text.endswith("[S1]")
     assert len(answer.results) > 0
 
-    refusal = service.answer("What dental insurance plan does Northstar provide?")
+    refusal = service.answer("What dental insurance plan is provided?")
     assert refusal.refused
     assert refusal.text == REFUSAL

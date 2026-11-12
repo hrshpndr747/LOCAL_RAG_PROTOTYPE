@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from northstar_rag.confluence import ConfluenceCloudClient, _safe_filename
-from northstar_rag.loaders import load_file
+from local_rag.confluence import ConfluenceCloudClient, _safe_filename
+from local_rag.loaders import load_file
 
 
 class FakeResponse:

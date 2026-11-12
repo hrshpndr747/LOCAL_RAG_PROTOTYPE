@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from northstar_rag.confluence import ConfluenceCloudClient, DEFAULT_ATTACHMENT_EXTENSIONS
+from local_rag.confluence import ConfluenceCloudClient, DEFAULT_ATTACHMENT_EXTENSIONS
 
 
 def env_bool(name: str, default: bool) -> bool:

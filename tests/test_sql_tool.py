@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from northstar_rag.sql_tool import execute_read_only, validate_read_only_sql
+from local_rag.sql_tool import execute_read_only, validate_read_only_sql
 
 
 def test_read_only_database_query(tmp_path):

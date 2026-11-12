@@ -1,4 +1,4 @@
-# Northstar Local RAG Prototype
+# LOCAL_RAG_PROTOTYPE
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
 [![Streamlit App](https://img.shields.io/badge/Streamlit-1.40%2B-FF4B4B.svg)](https://streamlit.io/)
@@ -141,7 +141,7 @@ Try asking the following test queries once your index is built:
 - 💬 *What are the four information-classification levels?*
 - 💬 *How many P1 tickets are in the workbook?*
 - 💬 *How many service requests are currently open in the database?*
-- ❌ *What dental insurance plan does Northstar provide?* *(Expected result: Explicit Refusal due to lack of evidence)*
+- ❌ *What dental insurance plan is provided?* *(Expected result: Explicit Refusal due to lack of evidence)*
 
 ---
 
@@ -202,13 +202,13 @@ python scripts/evaluate_retrieval.py
 ## Project Structure
 
 ```text
-Northstar_Local_RAG_Prototype/
+LOCAL_RAG_PROTOTYPE/
 ├── app.py                      # Main Streamlit web app
 ├── Dockerfile                  # Container definition
 ├── docker-compose.yml          # Container orchestration
 ├── .dockerignore               # Build context filter
 ├── .env.example                # Environment variable configuration template
-├── northstar_rag/              # Core RAG engine module
+├── local_rag/                  # Core RAG engine module
 │   ├── chunking.py             # Document splitting & token management
 │   ├── config.py               # Settings loader
 │   ├── confluence.py           # Confluence REST sync connector

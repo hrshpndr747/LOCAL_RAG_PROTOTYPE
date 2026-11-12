@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from northstar_rag.loaders import load_file
-from northstar_rag.media import MediaProcessor, MediaSettings, group_transcript_segments, media_sidecar
+from local_rag.loaders import load_file
+from local_rag.media import MediaProcessor, MediaSettings, group_transcript_segments, media_sidecar
 
 
 class FakeVisionClient:

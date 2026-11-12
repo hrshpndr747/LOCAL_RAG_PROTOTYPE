@@ -1,4 +1,4 @@
-"""Northstar local RAG prototype."""
+"""Local RAG prototype."""
 
 from .config import Settings
 from .service import RAGService
