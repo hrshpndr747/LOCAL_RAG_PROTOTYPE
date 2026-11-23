@@ -8,6 +8,7 @@ import streamlit as st
 from local_rag import RAGService, Settings
 from local_rag.ollama_client import OllamaClient, OllamaError
 from local_rag.sql_tool import execute_read_only
+from local_rag.table_parsing import TABLE_PARSER_VERSION
 
 
 st.set_page_config(page_title="Local RAG Prototype", page_icon="🔎", layout="wide")
@@ -46,6 +47,7 @@ with st.sidebar:
         try:
             manifest = service.manifest
             st.info(f"Index: {manifest.chunk_count} chunks from {manifest.source_count} files")
+            st.caption(f"Table parser: {TABLE_PARSER_VERSION}")
         except Exception as exc:
             st.warning(str(exc))
     else:

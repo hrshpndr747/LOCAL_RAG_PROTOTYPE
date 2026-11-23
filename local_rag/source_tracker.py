@@ -3,11 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, Iterable
 
 from .media import VIDEO_SUFFIXES, media_sidecar
+from .table_parsing import TABLE_PARSER_VERSION, get_parser_version
 
 
 def canonical_source_id(path: Path) -> str:
@@ -81,13 +82,15 @@ class SourceRecord:
     status: str = "success"  # "success", "failed"
     last_indexed_at: str = ""
     error: str | None = None
+    parser_version: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SourceRecord":
-        return cls(**data)
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
 
 @dataclass
@@ -158,6 +161,12 @@ def detect_changes(
             continue
 
         if rec.status == "failed":
+            result.modified_sources[disc.source_id] = disc
+            continue
+
+        # Invalidate source if parser version changed
+        expected_parser = get_parser_version(disc.path)
+        if getattr(rec, "parser_version", "") != expected_parser:
             result.modified_sources[disc.source_id] = disc
             continue
 

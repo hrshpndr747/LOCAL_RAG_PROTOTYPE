@@ -15,6 +15,7 @@ from pypdf import PdfReader
 from .media import AUDIO_SUFFIXES, IMAGE_SUFFIXES, VIDEO_SUFFIXES, media_sidecar
 from .models import SourceDocument
 from .source_tracker import DiscoveredSource, canonical_source_id
+from .table_parsing import clean_cell_value, parse_csv_lines, parse_sheet_rows
 
 
 SUPPORTED_SUFFIXES = {
@@ -111,9 +112,7 @@ def load_vtt(path: Path, root: Path) -> list[SourceDocument]:
 
 
 def _clean_cell(value) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
+    return clean_cell_value(value)
 
 
 def load_xlsx(path: Path, root: Path) -> list[SourceDocument]:
@@ -121,23 +120,21 @@ def load_xlsx(path: Path, root: Path) -> list[SourceDocument]:
     documents: list[SourceDocument] = []
     source_path = _display_path(path, root)
     for worksheet in workbook.worksheets:
-        values = list(worksheet.iter_rows(values_only=True))
-        if not values:
+        raw_rows = [(idx, list(row)) for idx, row in enumerate(worksheet.iter_rows(values_only=True), 1)]
+        if not raw_rows:
             continue
-        headers = [_clean_cell(value) or f"column_{index + 1}" for index, value in enumerate(values[0])]
-        rows: list[dict[str, str]] = []
-        for value_row in values[1:]:
-            row = {headers[index]: _clean_cell(value) for index, value in enumerate(value_row) if index < len(headers)}
-            if any(row.values()):
-                rows.append(row)
+        table = parse_sheet_rows(raw_rows, filename=path.name, sheet_name=worksheet.title)
+        headers = table.headers
+        records = table.records
+        row_numbers = table.row_numbers
 
-        if rows:
-            summary_lines = [f"Workbook: {path.name}", f"Sheet: {worksheet.title}", f"Total data rows: {len(rows)}"]
+        if records:
+            summary_lines = [f"Workbook: {path.name}", f"Sheet: {worksheet.title}", f"Total data rows: {len(records)}"]
             normalized_headers = {header.lower().replace(" ", "_"): header for header in headers}
-            for key in ("priority", "team", "category", "status", "within_sla"):
+            for key in ("priority", "team", "category", "status", "within_sla", "line", "cause"):
                 original = normalized_headers.get(key)
                 if original:
-                    counts = Counter(row.get(original, "") for row in rows if row.get(original, ""))
+                    counts = Counter(row.get(original, "") for row in records if row.get(original, ""))
                     summary_lines.append(f"Counts by {original}: " + ", ".join(f"{name}={count}" for name, count in sorted(counts.items())))
             documents.append(
                 SourceDocument(
@@ -146,13 +143,22 @@ def load_xlsx(path: Path, root: Path) -> list[SourceDocument]:
                     source_path=source_path,
                     source_type="spreadsheet",
                     locator=f"sheet {worksheet.title}; computed summary",
+                    metadata={"total_rows": len(records), "header_row": table.detection.header_row_index},
                 )
             )
-            for row_start in range(0, len(rows), 12):
-                group = rows[row_start : row_start + 12]
+            for start_idx in range(0, len(records), 12):
+                group_records = records[start_idx : start_idx + 12]
+                group_rows = row_numbers[start_idx : start_idx + 12]
+                start_row = group_rows[0]
+                end_row = group_rows[-1]
+                locator = (
+                    f"sheet {worksheet.title}; rows {start_row}–{end_row}"
+                    if start_row != end_row
+                    else f"sheet {worksheet.title}; row {start_row}"
+                )
                 row_lines = [
-                    "; ".join(f"{header}={row.get(header, '')}" for header in headers if row.get(header, ""))
-                    for row in group
+                    "; ".join(f"{header}={row.get(header, '')}" for header in headers if row.get(header, "") != "")
+                    for row in group_records
                 ]
                 documents.append(
                     SourceDocument(
@@ -160,7 +166,12 @@ def load_xlsx(path: Path, root: Path) -> list[SourceDocument]:
                         title=f"{path.stem.replace('_', ' ')} — {worksheet.title}",
                         source_path=source_path,
                         source_type="spreadsheet",
-                        locator=f"sheet {worksheet.title}; rows {row_start + 2}–{row_start + len(group) + 1}",
+                        locator=locator,
+                        metadata={
+                            "start_row": start_row,
+                            "end_row": end_row,
+                            "header_row": table.detection.header_row_index,
+                        },
                     )
                 )
     workbook.close()
@@ -238,18 +249,39 @@ def load_confluence_json(path: Path, root: Path) -> list[SourceDocument]:
 
 def load_csv(path: Path, root: Path) -> list[SourceDocument]:
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+        table = parse_csv_lines(handle, filename=path.name)
+    headers = table.headers
+    records = table.records
+    row_numbers = table.row_numbers
+    source_path = _display_path(path, root)
     output: list[SourceDocument] = []
-    for row_start in range(0, len(rows), 15):
-        group = rows[row_start : row_start + 15]
-        text = "\n".join("; ".join(f"{key}={value}" for key, value in row.items()) for row in group)
+    for start_idx in range(0, len(records), 15):
+        group_records = records[start_idx : start_idx + 15]
+        group_rows = row_numbers[start_idx : start_idx + 15]
+        start_row = group_rows[0]
+        end_row = group_rows[-1]
+        locator = (
+            f"rows {start_row}–{end_row}"
+            if start_row != end_row
+            else f"row {start_row}"
+        )
+        text = "\n".join(
+            "; ".join(f"{key}={value}" for key, value in row.items() if value != "")
+            for row in group_records
+        )
         output.append(
             SourceDocument(
                 text=text,
                 title=path.stem.replace("_", " "),
-                source_path=_display_path(path, root),
+                source_path=source_path,
                 source_type="csv",
-                locator=f"rows {row_start + 2}–{row_start + len(group) + 1}",
+                locator=locator,
+                metadata={
+                    "start_row": start_row,
+                    "end_row": end_row,
+                    "header_row": table.detection.header_row_index,
+                    "total_rows": len(records),
+                },
             )
         )
     return output

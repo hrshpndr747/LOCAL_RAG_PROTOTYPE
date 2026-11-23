@@ -27,6 +27,7 @@ from .source_tracker import (
     get_sidecar_fingerprints,
     text_sha256,
 )
+from .table_parsing import TABLE_PARSER_VERSION, get_parser_version
 
 REFUSAL = "Not enough information in the provided sources."
 
@@ -50,6 +51,7 @@ class RAGService:
             "embed_prefix": "search_document: ",
             "chunk_max_words": 260,
             "chunk_overlap_words": 45,
+            "table_parser_version": TABLE_PARSER_VERSION,
         }
 
     def source_roots(self) -> list[Path]:
@@ -166,6 +168,7 @@ class RAGService:
                         chunk_input_hashes=input_hashes,
                         status="success",
                         last_indexed_at=datetime.now(timezone.utc).isoformat(),
+                        parser_version=get_parser_version(disc.path),
                     )
                 except Exception as exc:
                     errors.append(f"{disc.source_path}: {exc}")
@@ -179,6 +182,7 @@ class RAGService:
                         sidecars=get_sidecar_fingerprints(disc.path),
                         status="failed",
                         error=str(exc),
+                        parser_version=get_parser_version(disc.path),
                     )
 
             chunks = chunk_documents(documents)
@@ -418,6 +422,7 @@ class RAGService:
                     chunk_input_hashes=[text_sha256(f"search_document: {c.title}\n{c.text}") for c in chunks_for_file],
                     status="success",
                     last_indexed_at=datetime.now(timezone.utc).isoformat(),
+                    parser_version=get_parser_version(disc.path),
                 )
 
             # 3. Failed sources: preserve previously valid chunks as stale
@@ -445,6 +450,7 @@ class RAGService:
                         status="failed",
                         last_indexed_at=datetime.now(timezone.utc).isoformat(),
                         error=err,
+                        parser_version=get_parser_version(disc.path),
                     )
                 elif s_id in tracked:
                     rec = tracked[s_id]

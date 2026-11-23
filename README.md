@@ -274,8 +274,31 @@ The sidebar provides two clearly separated indexing buttons:
    - If embedding or parsing fails midway, active index files are untouched:
      > *"Update failed. The previous valid index is still available."*
    - In-memory `HybridRetriever` and BM25 index are refreshed immediately upon successful update.
-8. **Legacy Index Migration**:
+8. **Legacy Index Migration & Selective Parser Invalidation**:
    - Indexes created with v1 (lacking `sources.json`) are automatically detected and migrated on first update without requiring a full re-embed of unchanged files.
+   - Granular parser version tracking (`parser_version` in `SourceRecord`) enables targeted schema invalidation. For instance, upgrading spreadsheet ingestion to `table_v2` automatically flags `.xlsx` and `.csv` files as modified for re-indexing while keeping non-spreadsheet files (PDF, DOCX, MP4, etc.) 100% unchanged with zero redundant embeddings.
+
+---
+
+## Structured Table Ingestion (Excel & CSV)
+
+Business spreadsheets frequently feature metadata banners, organizational titles, empty buffer rows, or notes before the actual data table begins. The system incorporates intelligent, deterministic table parsing via `local_rag/table_parsing.py`.
+
+### Robust Header Detection Heuristics
+Rather than naively treating row 1 as table headers, the parser inspects candidate rows using a multi-factor deterministic scoring model:
+- **Title & Banner Recognition**: Scans for single-cell spans, synthetic notes, legal disclaimers, or excessive length differences relative to subsequent tabular rows.
+- **Modal Width & Cell Contrast**: Computes the modal (most common) column count across the sheet and rewards candidate rows matching the table's width with predominantly text headers.
+- **Uniqueness & Empty Column Normalization**: Automatically deduplicates duplicate column names (e.g. `Category`, `Category_2`) and fills unlabelled columns with deterministic fallbacks (`column_4`).
+- **Data Row Guardrails**: Penalizes rows with numeric, date, currency, or formatted data to prevent the first real data row from being misidentified as a header.
+- **Single-Column & Row-1 Fallback**: Single-column lists and standard spreadsheets where row 1 is the header remain fully supported.
+
+### Accurate Record Counts & Physical Row Locators
+- **True Physical Row Citations**: Citations and chunk locators reflect the exact 1-based physical row in the source file (e.g. `sheet Loss Run; rows 3–14`), enabling users to verify answers directly in Excel.
+- **Cleaned Values & Formula Safeguards**: Strips trailing zeros from floating points (e.g. `100.0` -> `100`), formats dates consistently, and handles Excel formula placeholders safely.
+- **Verified Reference Files**:
+  - `loss-run.xlsx`: Row 1 title banner skipped; Row 2 detected as header; exactly **80 claims** parsed (rows 3–82).
+  - `premium-register.xlsx`: Row 1 title banner skipped; Row 2 detected as header; exactly **120 policies** parsed (rows 3–122).
+  - `commission-summary.csv`: Line 1 title banner skipped; Line 2 detected as header; exactly **15 broker records** parsed (lines 3–17).
 
 ---
 
@@ -328,13 +351,19 @@ To execute the test suite in the project virtual environment:
 .\.venv\Scripts\python.exe -m pytest -v
 ```
 
+To run only the table parsing test suite:
+
+```cmd
+.\.venv\Scripts\python.exe -m pytest tests/test_table_parsing.py -v
+```
+
 To run only the incremental indexing test suite:
 
 ```cmd
 .\.venv\Scripts\python.exe -m pytest tests/test_incremental_index.py -v
 ```
 
-All 35 automated tests run using deterministic fake embeddings and vision mocks; no external network connection or running Ollama server is required for the test suite.
+All 55 automated tests run using deterministic fake embeddings, spreadsheet mocks, and vision mocks; no external network connection or running Ollama server is required for the test suite.
 
 ---
 
@@ -360,7 +389,9 @@ LOCAL_RAG_PROTOTYPE/
 │   ├── ollama_client.py        # Ollama HTTP API client wrapper
 │   ├── retrieval.py            # Hybrid semantic + BM25 keyword search
 │   ├── service.py              # Main QA & RAG orchestration logic
-│   └── sql_tool.py             # Read-only SQLite query explorer
+│   ├── source_tracker.py       # Incremental change detection & fingerprinting
+│   ├── sql_tool.py             # Read-only SQLite query explorer
+│   └── table_parsing.py        # Deterministic Excel & CSV table parser
 ├── data/confluence/            # Synced Confluence knowledge base dataset
 ├── scripts/                    # CLI helper utility scripts
 └── tests/                      # Automated pytest suite

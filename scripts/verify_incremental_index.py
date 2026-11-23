@@ -16,6 +16,7 @@ from local_rag.config import Settings
 from local_rag.loaders import discover_sources
 from local_rag.service import RAGService
 from local_rag.source_tracker import detect_changes
+from local_rag.table_parsing import TABLE_PARSER_VERSION, get_parser_version
 
 
 def check_status(service: RAGService) -> None:
@@ -26,6 +27,7 @@ def check_status(service: RAGService) -> None:
     print(f"Index directory: {service.settings.index_dir}")
     print(f"Embedding model: {service.settings.embed_model}")
     print(f"Chat model:      {service.settings.chat_model}")
+    print(f"Table parser:    {TABLE_PARSER_VERSION}")
     print("-" * 60)
 
     if not service.store.exists():
