@@ -14,6 +14,7 @@ from pypdf import PdfReader
 
 from .media import AUDIO_SUFFIXES, IMAGE_SUFFIXES, VIDEO_SUFFIXES, media_sidecar
 from .models import SourceDocument
+from .source_tracker import DiscoveredSource, canonical_source_id
 
 
 SUPPORTED_SUFFIXES = {
@@ -340,8 +341,73 @@ def load_file(path: Path, root: Path) -> list[SourceDocument]:
 
 def discover_files(root: Path) -> Iterable[Path]:
     for path in sorted(root.rglob("*")):
-        if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES and not any(part.startswith(".") for part in path.parts):
+        if not path.is_file():
+            continue
+        try:
+            rel_parts = path.relative_to(root).parts
+        except ValueError:
+            rel_parts = path.parts
+        if any(part.startswith(".") or part == "__pycache__" for part in rel_parts):
+            continue
+        name_lower = path.name.lower()
+        if name_lower.endswith(".media.json") or name_lower.endswith(".confluence.json"):
+            continue
+        if path.suffix.lower() in SUPPORTED_SUFFIXES:
             yield path
+
+
+def discover_sources(
+    roots: Iterable[Path],
+    index_dir: Path | None = None,
+) -> list[DiscoveredSource]:
+    """Discover all supported source files across roots, deduplicating by canonical path."""
+    seen_canonical_ids: set[str] = set()
+    discovered: list[DiscoveredSource] = []
+
+    valid_roots = [r for r in roots if r.exists() and r.is_dir()]
+    valid_roots.sort(key=lambda r: len(r.resolve().parts))
+
+    resolved_index_dir = index_dir.resolve() if index_dir and index_dir.exists() else None
+
+    for root in valid_roots:
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            if resolved_index_dir and (resolved_index_dir in path.resolve().parents or path.resolve() == resolved_index_dir):
+                continue
+            try:
+                rel_parts = path.relative_to(root).parts
+            except ValueError:
+                rel_parts = path.parts
+            if any(part.startswith(".") or part == "__pycache__" for part in rel_parts):
+                continue
+            name_lower = path.name.lower()
+            if name_lower.endswith(".media.json") or name_lower.endswith(".confluence.json"):
+                continue
+            if path.suffix.lower() not in SUPPORTED_SUFFIXES:
+                continue
+
+            canonical_id = canonical_source_id(path)
+            if canonical_id in seen_canonical_ids:
+                continue
+            seen_canonical_ids.add(canonical_id)
+
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+
+            source_path = _display_path(path, root)
+            discovered.append(
+                DiscoveredSource(
+                    path=path,
+                    root=root,
+                    source_id=canonical_id,
+                    source_path=source_path,
+                    stat=stat,
+                )
+            )
+    return discovered
 
 
 def load_tree(root: Path) -> tuple[list[SourceDocument], list[str]]:

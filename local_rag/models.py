@@ -49,3 +49,25 @@ class Answer:
     refused: bool = False
     sql_used: str = ""
 
+
+@dataclass
+class IndexUpdateResult:
+    status: str
+    new_files: list[str] = field(default_factory=list)
+    modified_files: list[str] = field(default_factory=list)
+    deleted_files: list[str] = field(default_factory=list)
+    unchanged_files: list[str] = field(default_factory=list)
+    failed_files: dict[str, str] = field(default_factory=dict)
+    new_embeddings: int = 0
+    reused_embeddings: int = 0
+    total_files: int = 0
+    total_chunks: int = 0
+    elapsed_seconds: float = 0.0
+    manifest: Any = None
+    errors: list[str] = field(default_factory=list)
+    message: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+

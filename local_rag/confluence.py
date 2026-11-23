@@ -71,6 +71,17 @@ class ConfluenceCloudClient:
         self.session.auth = (email, api_token)
         self.session.headers.update({"Accept": "application/json"})
 
+    def _resolve_url(self, path: str) -> str:
+        if not path:
+            return ""
+        if path.startswith("http://") or path.startswith("https://"):
+            return path
+        wiki_base = f"{self.base_url}/wiki" if not self.base_url.endswith("/wiki") else self.base_url
+        clean_path = path if path.startswith("/") else f"/{path}"
+        if clean_path.startswith("/wiki/"):
+            clean_path = clean_path[5:]
+        return f"{wiki_base}{clean_path}"
+
     def _get(self, url: str, params: dict | None = None) -> requests.Response:
         import time
         max_retries = 6
@@ -172,9 +183,9 @@ class ConfluenceCloudClient:
         webui = attachment.get("webuiLink") or attachment.get("_links", {}).get("webui", "")
         page_webui = page.get("_links", {}).get("webui", "")
         source_url = (
-            urljoin(self.base_url, webui)
+            self._resolve_url(webui)
             if webui
-            else urljoin(self.base_url, page_webui)
+            else self._resolve_url(page_webui)
             if page_webui
             else f"{self.base_url}/wiki/pages/viewpage.action?pageId={page_id}"
         )
@@ -265,7 +276,7 @@ class ConfluenceCloudClient:
                 "space_key": space_key,
                 "title": page.get("title", safe_title),
                 "version": page.get("version", {}).get("number"),
-                "url": urljoin(self.base_url, webui) if webui else f"{self.base_url}/wiki/spaces/{space_key}/pages/{page_id}",
+                "url": self._resolve_url(webui) if webui else f"{self.base_url}/wiki/spaces/{space_key}/pages/{page_id}",
                 "text": text,
             }
             target = output_dir / f"{page_id}_{safe_title or 'page'}.json"

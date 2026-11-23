@@ -51,16 +51,48 @@ with st.sidebar:
     else:
         st.warning("Index has not been built")
 
-    if st.button("Build / rebuild index", type="primary", use_container_width=True):
+    if st.button("Update Index (Incremental)", type="primary", use_container_width=True, help="Scan local files for changes and re-embed only new or modified documents."):
         try:
-            with st.spinner("Processing OCR/video, reading files, and creating local embeddings…"):
-                manifest = service.build_index()
-            st.success(f"Built {manifest.chunk_count} chunks from {manifest.source_count} files.")
-            if manifest.errors:
-                st.warning("Some files were skipped:\n" + "\n".join(manifest.errors))
+            with st.spinner("Scanning files for changes and incrementally updating index…"):
+                result = service.update_index()
+            if result.status == "up_to_date":
+                st.info(result.message)
+            elif result.status in {"updated", "initial", "rebuilt"}:
+                st.success(result.message)
+                with st.expander("Update statistics", expanded=True):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("New files", len(result.new_files))
+                        st.metric("Modified files", len(result.modified_files))
+                        st.metric("Deleted files", len(result.deleted_files))
+                        st.metric("Unchanged files", len(result.unchanged_files))
+                    with col2:
+                        st.metric("New embeddings", result.new_embeddings)
+                        st.metric("Reused embeddings", result.reused_embeddings)
+                        st.metric("Total chunks", result.total_chunks)
+                        st.metric("Elapsed time", f"{result.elapsed_seconds:.2f}s")
+                    if result.failed_files:
+                        st.error("Failed files:\n" + "\n".join(f"- {k}: {v}" for k, v in result.failed_files.items()))
+                    if result.errors:
+                        st.warning("Errors / warnings:\n" + "\n".join(result.errors[:5]))
+            elif result.status == "failed":
+                st.error(result.message)
+                if result.errors:
+                    st.warning("\n".join(result.errors[:5]))
             st.rerun()
         except Exception as exc:
-            st.error(str(exc))
+            st.error(f"Update failed. The previous valid index is still available. Details: {exc}")
+
+    if st.button("Full Rebuild Index", use_container_width=True, help="Re-parse and re-embed every document from scratch."):
+        try:
+            with st.spinner("Processing OCR/video, reading files, and rebuilding complete index…"):
+                manifest = service.build_index()
+            st.success(f"Full index rebuilt: {manifest.chunk_count} chunks from {manifest.source_count} files.")
+            if manifest.errors:
+                st.warning("Some files were skipped:\n" + "\n".join(manifest.errors[:5]))
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Rebuild failed: {exc}")
 
     st.divider()
     with st.expander("Read-only SQLite explorer"):

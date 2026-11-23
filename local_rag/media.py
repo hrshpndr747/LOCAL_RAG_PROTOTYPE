@@ -275,8 +275,28 @@ class MediaProcessor:
             payload = json.loads(sidecar.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return False
-        stat = path.stat()
-        return payload.get("source_size") == stat.st_size and payload.get("source_mtime_ns") == stat.st_mtime_ns
+        try:
+            stat = path.stat()
+        except OSError:
+            return False
+        if payload.get("source_size") != stat.st_size or payload.get("source_mtime_ns") != stat.st_mtime_ns:
+            return False
+        suffix = path.suffix.lower()
+        if suffix in IMAGE_SUFFIXES or suffix == ".pdf":
+            if payload.get("vision_model") != self.settings.vision_model:
+                return False
+        elif suffix in VIDEO_SUFFIXES:
+            if payload.get("vision_model") != self.settings.vision_model:
+                return False
+            has_vtt = path.with_suffix(".vtt").exists()
+            if payload.get("has_vtt") != has_vtt:
+                return False
+            if not has_vtt and payload.get("whisper_model") != self.settings.whisper_model:
+                return False
+        elif suffix in AUDIO_SUFFIXES:
+            if payload.get("whisper_model") != self.settings.whisper_model:
+                return False
+        return True
 
     def process_file(self, path: Path, force: bool = False) -> bool:
         suffix = path.suffix.lower()
@@ -301,6 +321,7 @@ class MediaProcessor:
             "source_mtime_ns": stat.st_mtime_ns,
             "vision_model": self.settings.vision_model,
             "whisper_model": self.settings.whisper_model if suffix in VIDEO_SUFFIXES | AUDIO_SUFFIXES else None,
+            "has_vtt": path.with_suffix(".vtt").exists() if suffix in VIDEO_SUFFIXES else False,
             "items": items,
         }
         media_sidecar(path).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

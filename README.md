@@ -185,17 +185,158 @@ python scripts/process_media.py
 
 ---
 
-## Testing & Evaluation
+## Incremental Indexing Architecture
 
-Run automated unit tests:
-```bash
-python -m pytest -q
+This system implements robust, transactional **Incremental Indexing** designed for local operation on Windows 11, macOS, and Linux without third-party vector databases.
+
+```mermaid
+flowchart TD
+    A[Source Discovery & Canonical Deduplication] --> B[Change Detector]
+    B --> C{File Classification}
+    
+    C -->|Unchanged| D[Reuse Chunks & Existing Embeddings]
+    C -->|New| E[Parse, Chunk & Generate New Embeddings]
+    C -->|Modified| F[Reparse & Chunk Document]
+    C -->|Deleted| G[Remove Outdated Chunks & Embeddings]
+    C -->|Failed| H[Retain Previous Valid Chunks as Stale & Report Error]
+    
+    F --> I{Chunk Text / Title Changed?}
+    I -->|No Change| J[Reuse Existing Vector from Embedding Pool]
+    I -->|Changed / New| K[Generate New Vector via Ollama]
+    
+    D --> L[Staging Directory Validation]
+    E --> L
+    J --> L
+    K --> L
+    G --> L
+    H --> L
+    
+    L -->|Validation Passed| M[Atomically Activate New Index & Refresh HybridRetriever]
+    L -->|Failure| N[Retain Previous Valid Index Untouched]
 ```
 
-Evaluate retrieval performance against the included question evaluation benchmark (`rag_evaluation_questions.json`):
+### Full vs. Incremental Indexing
+
+| Feature | Update Index (Incremental) | Full Rebuild Index |
+| :--- | :--- | :--- |
+| **Default Action** | **Yes (Recommended Default)** | Manual override when requested |
+| **Unchanged Documents** | Skipped; existing embeddings & chunks reused (0 embedding calls) | Completely reparsed and re-embedded |
+| **New Documents** | Embedded and merged into index | Ingested and embedded |
+| **Modified Documents** | Reparsed; unchanged chunks reuse vectors, changed chunks re-embedded | All chunks re-embedded |
+| **Deleted Documents** | Removed from active index and retriever | Omitted |
+| **Execution Time** | Sub-second when up to date; seconds for small changes | Minutes (depends on corpus size & OCR/Whisper) |
+| **Ollama Workload** | Proportional only to newly added/changed chunk text | Full corpus re-embedding |
+
+### Streamlit UI Actions
+
+The sidebar provides two clearly separated indexing buttons:
+
+1. **Update Index (Incremental)** *(Recommended Default)*:
+   - Scans configured source roots for added, modified, deleted, or unchanged files.
+   - Reuses existing embeddings for unchanged content and re-embeds only new or changed chunks.
+   - If no changes are detected, completes instantly and displays:
+     > *"Index is already up to date. No changes detected."*
+   - After updating, displays complete statistics:
+     - New files, modified files, deleted files, unchanged files, and failed files.
+     - Newly generated embeddings count vs. reused embeddings count.
+     - Total indexed files, total chunks, and elapsed processing time.
+2. **Full Rebuild Index**:
+   - Explicitly rebuilds the complete vector index from scratch, rerunning OCR/Whisper (if forced) and re-embedding every chunk.
+
+### How Change Detection & Embedding Reuse Works
+
+1. **Canonical Source Identification**:
+   - Files are tracked using normalized canonical filesystem paths (`os.path.normcase(os.path.normpath(str(path.resolve())))`) rather than only display names.
+   - Files with identical names in different directories (e.g. `engineering/handbook.txt` and `sales/handbook.txt`) are tracked as distinct sources.
+   - Overlapping source roots (e.g., `data/confluence` and `data/confluence/attachments`) are deduplicated so physical files are never indexed twice.
+2. **Persistent Tracking Metadata (`sources.json`)**:
+   - Maintained in the index directory across application restarts.
+   - Records file size, modification timestamp (`st_mtime_ns`), SHA-256 content fingerprint, associated sidecar hashes, and chunk hashes.
+   - **Timestamp Touch Protection**: If file timestamps change (e.g. via `touch` or git checkout) but the SHA-256 content hash is identical, the system detects it as unchanged and performs zero re-embedding.
+3. **Exact Embedding Input Matching**:
+   - Embeddings are generated from `search_document: {chunk.title}\n{chunk.text}`.
+   - An in-memory embedding pool maps `sha256(embedding_input) -> vector`.
+   - Embeddings are reused only when the full embedding text and title match. This guarantees that changes past the first 80 characters (beyond `chunk_id` prefix) are never falsely reused.
+4. **Deleted and Renamed Files**:
+   - Deleting a local file removes its chunks, vectors, and tracking records from the index on the next update. User source files are never deleted by the indexing system.
+   - Moving or renaming a file removes the old path's chunks and adds the new path's chunks without creating duplicate entries. If the document content and title remain identical, embeddings are reused with 0 calls to Ollama.
+5. **Media Sidecars & Metadata Handling**:
+   - Media sidecars (`.{name}.media.json`), Confluence attachment metadata (`.{name}.confluence.json`), and companion transcripts (`.vtt`) are tracked alongside source files.
+   - If a Confluence sidecar updates metadata (e.g. URL or version) but document text is unchanged, chunk metadata is refreshed without re-embedding.
+   - MediaProcessor caches OCR and Whisper transcripts; processing is only re-triggered if the media file changes or vision/whisper model configuration changes.
+6. **Configuration Change Detection**:
+   - The index stores an explicit versioned configuration signature (`embed_model`, `embed_prefix`, `chunk_max_words`, `chunk_overlap_words`).
+   - If the embedding model changes (e.g. from `qwen3-embedding:0.6b` to another model), incompatible vectors cannot be mixed; the system clearly alerts the user and performs a full rebuild.
+7. **Safe and Recoverable Persistence on Windows 11**:
+   - Atomic multi-file updates use temporary staging directories (`.staging_<uuid>`).
+   - Before activating, chunk counts, embedding matrix dimensions (`N x D`), and JSON formats are validated.
+   - The previous valid snapshot is automatically backed up to `.rag_index/backup`.
+   - If embedding or parsing fails midway, active index files are untouched:
+     > *"Update failed. The previous valid index is still available."*
+   - In-memory `HybridRetriever` and BM25 index are refreshed immediately upon successful update.
+8. **Legacy Index Migration**:
+   - Indexes created with v1 (lacking `sources.json`) are automatically detected and migrated on first update without requiring a full re-embed of unchanged files.
+
+---
+
+## Verification & Diagnostic CLI
+
+A standalone diagnostic utility is included to verify incremental indexing state from the command line:
+
 ```bash
-python scripts/evaluate_retrieval.py
+# Check current index status, tracked sources, and pending changes:
+python scripts/verify_incremental_index.py --check
+
+# Execute incremental update from CLI:
+python scripts/verify_incremental_index.py --update
+
+# Execute full rebuild from CLI:
+python scripts/verify_incremental_index.py --rebuild
 ```
+
+Example diagnostic output:
+```text
+============================================================
+Local RAG Index Diagnostic Tool
+============================================================
+Data directory:  data/confluence
+Index directory: .rag_index
+Embedding model: qwen3-embedding:0.6b
+Chat model:      qwen3.5:4b
+------------------------------------------------------------
+Index Status: [ACTIVE]
+Total chunks:    73
+Total sources:   23
+Has sources.json: Yes (v2 incremental)
+Has backup dir:   Yes
+------------------------------------------------------------
+Checking filesystem for pending source changes...
+Discovered on disk: 23 supported files
+Pending changes:    NONE (Index is up to date)
+============================================================
+```
+
+---
+
+## Testing & Quality Assurance
+
+### Running Tests on Windows 11
+
+To execute the test suite in the project virtual environment:
+
+```cmd
+.\.venv\Scripts\python.exe -m pytest -v
+```
+
+To run only the incremental indexing test suite:
+
+```cmd
+.\.venv\Scripts\python.exe -m pytest tests/test_incremental_index.py -v
+```
+
+All 35 automated tests run using deterministic fake embeddings and vision mocks; no external network connection or running Ollama server is required for the test suite.
+
+---
 
 ---
 
